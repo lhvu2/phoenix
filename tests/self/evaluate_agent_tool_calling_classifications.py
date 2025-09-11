@@ -1,15 +1,12 @@
-# source: https://github.com/Arize-ai/phoenix/blob/main/tutorials/evals/evaluate_agent_tool_selection_classifications.ipynb
 import nest_asyncio
-import json
+import seaborn as sns
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+
+
 from tqdm import tqdm
+import json
 import os
 from getpass import getpass
-import pandas as pd
-import requests
-import json
-import random
-import re
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 import matplotlib.pyplot as plt
 import openai
@@ -22,6 +19,11 @@ from phoenix.evals import (
     OpenAIModel,
     llm_classify,
 )
+import pandas as pd
+import requests
+import json
+import random
+import re
 
 # Parse tool definitions into a dict: tool_name -> list of required parameters
 def extract_tool_param_templates(tool_definitions):
@@ -39,16 +41,18 @@ def extract_tool_param_templates(tool_definitions):
                 continue
     return tools
 
-if __name__ == "__main__":
-    nest_asyncio.apply()
-    pd.set_option("display.max_colwidth", None)
 
+nest_asyncio.apply()
+pd.set_option("display.max_colwidth", None)
+
+if __name__ == "__main__":
     # Load dataset
     url = "https://huggingface.co/datasets/gorilla-llm/Berkeley-Function-Calling-Leaderboard/resolve/main/BFCL_v3_exec_multiple.json"
     response = requests.get(url)
     dataset = [json.loads(line) for line in response.text.strip().splitlines()]
 
-    # Collect all unique tool definitions (these are all the tools the agent can choose from)
+    # Collect all unique tool definitions (these are all the tools the agent
+    # can choose from, as well as their parameters)
     unique_tools = {}
     for entry in dataset:
         for tool in entry.get("function", []):
@@ -71,7 +75,6 @@ if __name__ == "__main__":
             )
 
     df_eval = pd.DataFrame(eval_data)
-
 
     tool_param_templates = extract_tool_param_templates(tool_definitions_text)
     tool_names = list(tool_param_templates.keys())
@@ -129,7 +132,8 @@ if __name__ == "__main__":
     # OPTIONAL: Shuffle AFTER labeling
     df_eval_final = df_combined.sample(frac=1).reset_index(drop=True)
 
-    print(templates.TOOL_SELECTION_PROMPT_TEMPLATE)
+    print(templates.TOOL_CALLING_PROMPT_TEMPLATE)
+
 
     model_id = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8"
     base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-4-mvk-17b-128e-fp8/v1"
@@ -144,13 +148,16 @@ if __name__ == "__main__":
 
     models = [model_id]
     all_results = []
+    rails = list(templates.TOOL_CALLING_PROMPT_RAILS_MAP.values())
+
     for model_name in tqdm(models):
         print(f"\n🧪 Evaluating model: {model_name}")
+        # model = OpenAIModel(model=model_name, temperature=1)
         results = llm_classify(
             data=df_eval,
-            template=templates.TOOL_SELECTION_PROMPT_TEMPLATE,
+            template=templates.TOOL_CALLING_PROMPT_TEMPLATE,
             model=model,
-            rails=["correct", "incorrect"],
+            rails=rails,
             provide_explanation=False,
         )
 
@@ -158,6 +165,7 @@ if __name__ == "__main__":
         df_result["label"] = results["label"]
         df_result["model"] = model_name
         all_results.append(df_result)
+
         break
 
     # Combine results and save
@@ -235,3 +243,4 @@ if __name__ == "__main__":
     rails = ["correct", "incorrect"]  # class order
 
     pass
+
