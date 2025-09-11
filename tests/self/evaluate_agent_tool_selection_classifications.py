@@ -23,6 +23,8 @@ from phoenix.evals import (
     llm_classify,
 )
 
+a = templates.TOOL_CALLING_PROMPT_TEMPLATE
+
 # Parse tool definitions into a dict: tool_name -> list of required parameters
 def extract_tool_param_templates(tool_definitions):
     tools = {}
