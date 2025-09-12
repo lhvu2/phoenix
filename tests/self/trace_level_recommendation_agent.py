@@ -7,8 +7,12 @@ import ast
 import os
 
 
-model_id = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8"
-base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-4-mvk-17b-128e-fp8/v1"
+# model_id = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8"
+# base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-4-mvk-17b-128e-fp8/v1"
+
+model_id = "meta-llama/llama-3-3-70b-instruct"
+base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-3-3-70b-instruct/v1"
+
 gen_params = {}
 gen_params["extra_headers"] = {"RITS_API_KEY": os.environ.get("RITS_API_KEY")}
 

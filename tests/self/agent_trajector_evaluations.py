@@ -234,8 +234,11 @@ import os
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 
-model_id = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8"
-base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-4-mvk-17b-128e-fp8/v1"
+# model_id = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8"
+# base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-4-mvk-17b-128e-fp8/v1"
+
+model_id = "meta-llama/llama-3-3-70b-instruct"
+base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-3-3-70b-instruct/v1"
 
 rits_client = OpenAI(api_key=os.environ.get("RITS_API_KEY"), base_url=base_url)
 
@@ -244,6 +247,59 @@ TASK_MODEL = model_id
 gen_params = {}
 gen_params["extra_headers"] = {"RITS_API_KEY": os.environ.get("RITS_API_KEY")}
 
+from agents import Agent, Runner, function_tool
+from typing import List, Union
+from openai import OpenAI
+import ast
+
+@function_tool
+def movie_selector_llm(genre: str) -> List[str]:
+    prompt = (
+        f"List up to 5 recent popular streaming movies in the {genre} genre. "
+        "Provide only movie titles as a Python list of strings."
+    )
+    response = rits_client.chat.completions.create(
+        model=model_id,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=150,
+        **gen_params
+    )
+    content = response.choices[0].message.content
+    try:
+        movie_list = ast.literal_eval(content)
+        if isinstance(movie_list, list):
+            return movie_list[:5]
+    except Exception:
+        return content.split('\n')
+
+@function_tool
+def reviewer_llm(movies: Union[str, List[str]]) -> str:
+    if isinstance(movies, list):
+        movies_str = ", ".join(movies)
+        prompt = f"Sort the following movies by rating from highest to lowest and provide a short review for each:\n{movies_str}"
+    else:
+        prompt = f"Provide a short review and rating for the movie: {movies}"
+    response = rits_client.chat.completions.create(
+            model=model_id,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=300,
+            **gen_params
+    )
+    return response.choices[0].message.content.strip()
+
+@function_tool
+def preview_summarizer_llm(movie: str) -> str:
+    prompt = f"Write a 1-2 sentence summary describing the movie '{movie}'."
+    response = rits_client.chat.completions.create(
+        model=model_id,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=100,
+        **gen_params
+    )
+    return response.choices[0].message.content.strip()
 
 def agent_router(input):
     # Obtain a tracer instance
@@ -257,7 +313,8 @@ def agent_router(input):
         response = rits_client.chat.completions.create(
             model=TASK_MODEL,
             temperature=0,
-            functions=functions,
+            #functions=functions,
+            tools=[movie_selector_llm, reviewer_llm, preview_summarizer_llm],
             messages=[
                 {
                     "role": "system",
@@ -268,6 +325,7 @@ def agent_router(input):
                     "content": input["questions"],
                 },
             ],
+            #tool_choice="auto",
             **gen_params
         )
 
@@ -283,7 +341,7 @@ def agent_router(input):
             arguments = "no function called"
             generated_response = response.choices[0].message.content
 
-        print(f"Running for question: {input['questions']}") 
+        print(f"Running for question: {input['questions']}, function_call_name: {function_call_name}") 
 
         span.set_attribute(SpanAttributes.INPUT_VALUE, input["questions"])
         span.set_attribute(SpanAttributes.OUTPUT_VALUE, generated_response)
