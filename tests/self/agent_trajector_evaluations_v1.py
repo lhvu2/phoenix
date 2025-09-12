@@ -1,7 +1,6 @@
 import pandas as pd
 
 #source: https://arize.com/docs/ax/cookbooks/agents/tracing-a-routing-agent
-
 # Import open-telemetry dependencies
 from arize.otel import register
 
