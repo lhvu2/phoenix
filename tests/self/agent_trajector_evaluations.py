@@ -1,9 +1,18 @@
-import pandas as pd
-
 #source: https://arize.com/docs/ax/cookbooks/agents/tracing-a-routing-agent
 
+import pandas as pd
+import os
 # Import open-telemetry dependencies
 from arize.otel import register
+# Import the automatic instrumentor from OpenInference
+from openinference.instrumentation.openai import OpenAIInstrumentor
+import nest_asyncio
+import pandas as pd
+from phoenix.evals import OpenAIModel
+import pathlib
+from os.path import join
+script_directory = pathlib.Path(__file__).parent.resolve()
+print(script_directory)
 
 # Setup OTEL via our convenience function
 tracer_provider = register(
@@ -11,15 +20,9 @@ tracer_provider = register(
     api_key=os.environ["ARIZE_API_KEY"],
     project_name="agents-tracing-example",  # name this to whatever you would like
 )
-# Import the automatic instrumentor from OpenInference
-from openinference.instrumentation.openai import OpenAIInstrumentor
 
 # Finish automatic instrumentation
 OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
-
-import nest_asyncio
-import pandas as pd
-from phoenix.evals import OpenAIModel
 
 nest_asyncio.apply()
 
@@ -172,8 +175,6 @@ functions = [
     },
 ]
 
-import os
-
 model_id = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8"
 base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-4-mvk-17b-128e-fp8/v1"
 
@@ -185,14 +186,18 @@ model = OpenAIModel(
     default_headers={'RITS_API_KEY': os.environ["RITS_API_KEY"]},
 )
 
-resp = model(GEN_TEMPLATE)
+# resp = model(GEN_TEMPLATE)
 
-split_response = resp.strip().split("\n")
+# split_response = resp.strip().split("\n")
 
-questions_df = pd.DataFrame(split_response, columns=["questions"])
-questions_df["generated_function"] = ""
-questions_df["response"] = ""
+# questions_df = pd.DataFrame(split_response, columns=["questions"])
+# questions_df["generated_function"] = ""
+# questions_df["response"] = ""
+# print(questions_df["questions"])
+
+questions_df = pd.read_csv(join(script_directory, "questions.csv"))
 print(questions_df["questions"])
+
 
 ROUTER_TEMPLATE = """ You are comparing a response to a question, and verifying whether that response should have made a function call instead of responding directly. Here is the data:
     [BEGIN DATA]
@@ -226,7 +231,8 @@ from openinference.semconv.trace import (
 
 
 import os
-from langchain_openai import ChatOpenAI, OpenAI
+from langchain_openai import ChatOpenAI
+from openai import OpenAI
 
 model_id = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8"
 base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-4-mvk-17b-128e-fp8/v1"
@@ -276,6 +282,9 @@ def agent_router(input):
             function_call_name = "no function called"
             arguments = "no function called"
             generated_response = response.choices[0].message.content
+
+        print(f"Running for question: {input['questions']}") 
+
         span.set_attribute(SpanAttributes.INPUT_VALUE, input["questions"])
         span.set_attribute(SpanAttributes.OUTPUT_VALUE, generated_response)
         ret = {
@@ -324,7 +333,6 @@ def handle_function_call(function_call_name, arguments):
 
         # Extract the generated response from the LLM
         generated_response = response.choices[0].message.content
-
         return generated_response
 
 def process_questions(df):
@@ -341,4 +349,6 @@ def process_questions(df):
 
 returned_df = process_questions(questions_df)
 
+output_file_path = join(script_directory, "returned_df.jsonl")
+returned_df.to_json(output_file_path, orient='records', lines=True, force_ascii=False)
 pass

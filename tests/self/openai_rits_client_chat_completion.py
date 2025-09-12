@@ -132,26 +132,26 @@ rits_client = OpenAI(api_key=os.environ.get("RITS_API_KEY"), base_url=endpoint_u
 gen_params = {}
 gen_params["extra_headers"] = {"RITS_API_KEY": os.environ.get("RITS_API_KEY")}
 
-message = {
-    "role": "user",
-    "content": [
-        {
-            "type": "text",
-            "text": f"Please describe this image",
-        },
-        {
-            "type": "image_url",
-            "image_url": {"url": "https://huggingface.co/datasets/patrickvonplaten/random_img/resolve/main/yosemite.png"},
-        },
-    ],
-}
+# message = {
+#     "role": "user",
+#     "content": [
+#         {
+#             "type": "text",
+#             "text": f"Please describe this image",
+#         },
+#         {
+#             "type": "image_url",
+#             "image_url": {"url": "https://huggingface.co/datasets/patrickvonplaten/random_img/resolve/main/yosemite.png"},
+#         },
+#     ],
+# }
 
-completion = rits_client.chat.completions.create(
-    messages=[message], 
-    model=model_id,
-    functions=functions,
-    **gen_params
-)
+# completion = rits_client.chat.completions.create(
+#     messages=[message], 
+#     model=model_id,
+#     functions=functions,
+#     **gen_params
+# )
 
 question = "I'm looking for a new laptop, can you recommend some high-end options that are good for gaming and video editing?"
 response = rits_client.chat.completions.create(
