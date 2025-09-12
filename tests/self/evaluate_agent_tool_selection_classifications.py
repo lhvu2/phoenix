@@ -149,14 +149,14 @@ if __name__ == "__main__":
     for model_name in tqdm(models):
         print(f"\n🧪 Evaluating model: {model_name}")
         results = llm_classify(
-            data=df_eval,
+            data=df_combined,
             template=templates.TOOL_SELECTION_PROMPT_TEMPLATE,
             model=model,
             rails=["correct", "incorrect"],
             provide_explanation=False,
         )
 
-        df_result = df_eval.copy()
+        df_result = df_combined.copy()
         df_result["label"] = results["label"]
         df_result["model"] = model_name
         all_results.append(df_result)
