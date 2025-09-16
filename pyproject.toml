@@ -39,6 +39,7 @@ dependencies = [
   "grpc-interceptor",
   "tqdm",
   "httpx",
+  "openinference-instrumentation-openai",
   "opentelemetry-sdk",
   "opentelemetry-proto>=1.12.0",  # needed to avoid this issue: https://github.com/Arize-ai/phoenix/issues/2695
   "opentelemetry-exporter-otlp",

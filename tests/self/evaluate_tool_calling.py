@@ -1,25 +1,26 @@
 # source: https://github.com/Arize-ai/phoenix/blob/b107d9bc848efd38f030a8c72954e89616c43723/tutorials/evals/evaluate_tool_calling.ipynb
 
 import os
-import phoenix as px
-import pandas as pd
 
+import pandas as pd
 from langchain.agents import AgentType, initialize_agent
 from langchain.prompts.chat import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 from langchain_openai import ChatOpenAI, OpenAI
-#from phoenix.trace.langchain import LangChainInstrumentor
-from phoenix.trace import SpanEvaluations
-from phoenix.trace.dsl import SpanQuery
+from openinference.instrumentation.langchain import LangChainInstrumentor
 
-import pandas as pd
+import phoenix as px
 import phoenix.evals.default_templates as templates
 from phoenix.evals import (
-    #TOOL_CALLING_PROMPT_RAILS_MAP,
-    #TOOL_CALLING_PROMPT_TEMPLATE,
+    # TOOL_CALLING_PROMPT_RAILS_MAP,
+    # TOOL_CALLING_PROMPT_TEMPLATE,
     OpenAIModel,
     llm_classify,
 )
+
+# from phoenix.trace.langchain import LangChainInstrumentor
+from phoenix.trace.dsl import SpanQuery
+
 
 ## function definitions using pydantic decorator
 @tool
@@ -147,6 +148,7 @@ def track_package(tracking_number: int) -> dict:
 
     # Implement the function logic here
     return {"status": "Delivered"}
+
 
 GEN_TEMPLATE = """
 You are an assistant that generates complex customer service questions. You will try to answer the question with the tool if possible,
@@ -303,7 +305,7 @@ tools = [
                 },
                 "discount_code": {
                     "type": "string",
-                    "description": "The discount code to apply
+                    "description": "The discount code to apply"
                 }
             },
             "required": ["order_id, discount_code"]
@@ -312,7 +314,6 @@ tools = [
 ]
 
 """
-from openinference.instrumentation.langchain import LangChainInstrumentor
 
 if __name__ == "__main__":
     session = px.launch_app()
@@ -337,9 +338,9 @@ if __name__ == "__main__":
         model=model_id,
         temperature=0,
         max_retries=2,
-        api_key='/',
+        api_key="/",
         base_url=base_url,
-        default_headers={'RITS_API_KEY': os.environ["RITS_API_KEY"]},
+        default_headers={"RITS_API_KEY": os.environ["RITS_API_KEY"]},
     )
 
     resp = model(GEN_TEMPLATE)
@@ -350,9 +351,9 @@ if __name__ == "__main__":
         model=model_id,
         temperature=0,
         max_retries=2,
-        api_key='/',
+        api_key="/",
         base_url=base_url,
-        default_headers={'RITS_API_KEY': os.environ["RITS_API_KEY"]},
+        default_headers={"RITS_API_KEY": os.environ["RITS_API_KEY"]},
     )
 
     # llm = ChatOpenAI(model="gpt-4o")
@@ -386,19 +387,21 @@ if __name__ == "__main__":
     trace_df = questions_df
     trace_df["tool_call"] = trace_df["tool_call"].fillna("No tool used")
 
-    eval_model =  OpenAIModel(
+    eval_model = OpenAIModel(
         model=model_id,
         temperature=0,
-        api_key='/',
+        api_key="/",
         base_url=base_url,
-        default_headers={'RITS_API_KEY': os.environ["RITS_API_KEY"]},
+        default_headers={"RITS_API_KEY": os.environ["RITS_API_KEY"]},
     )
 
     rails = list(templates.TOOL_CALLING_PROMPT_RAILS_MAP.values())
 
     response_classifications = llm_classify(
         dataframe=trace_df,
-        template=templates.TOOL_CALLING_PROMPT_TEMPLATE.template.replace("{tool_definitions}", json_tools),
+        template=templates.TOOL_CALLING_PROMPT_TEMPLATE.template.replace(
+            "{tool_definitions}", json_tools
+        ),
         model=eval_model,
         rails=rails,
         provide_explanation=True,

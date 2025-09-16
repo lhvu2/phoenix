@@ -1,22 +1,36 @@
-#source: https://arize.com/docs/ax/cookbooks/agents/tracing-a-routing-agent
+# source: https://arize.com/docs/ax/cookbooks/agents/tracing-a-routing-agent
 
-import pandas as pd
+import json
 import os
-# Import open-telemetry dependencies
-from arize.otel import register
-# Import the automatic instrumentor from OpenInference
-from openinference.instrumentation.openai import OpenAIInstrumentor
-import nest_asyncio
-import pandas as pd
-from phoenix.evals import OpenAIModel
 import pathlib
 from os.path import join
+
+import nest_asyncio
+import pandas as pd
+from openai import OpenAI
+
+# Import the automatic instrumentor from OpenInference
+from openinference.instrumentation.openai import OpenAIInstrumentor
+from openinference.semconv.trace import (
+    OpenInferenceSpanKindValues,
+    SpanAttributes,
+    ToolCallAttributes,
+)
+from opentelemetry import trace
+
+from phoenix.evals import OpenAIModel
+
+# Import open-telemetry dependencies
+from phoenix.otel import register
+
+tracer = trace.get_tracer(__name__)
+
 script_directory = pathlib.Path(__file__).parent.resolve()
 print(script_directory)
 
 # Setup OTEL via our convenience function
 tracer_provider = register(
-    space_id=os.environ["ARIZE_SPACE_ID"],
+    # space_id=os.environ["ARIZE_SPACE_ID"],
     api_key=os.environ["ARIZE_API_KEY"],
     project_name="agents-tracing-example",  # name this to whatever you would like
 )
@@ -53,137 +67,146 @@ Generate 25 questions. Be sure there are no duplicate questions.
 
 functions = [
     {
-        "type": "function",
-        "name": "product_comparison",
-        "description": "Compare features of two products.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "product_a_id": {
-                    "type": "string",
-                    "description": "The unique identifier of Product A.",
+        "function": {
+            "name": "product_comparison",
+            "description": "Compare features of two products.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_a_id": {
+                        "type": "string",
+                        "description": "The unique identifier of Product A.",
+                    },
+                    "product_b_id": {
+                        "type": "string",
+                        "description": "The unique identifier of Product B.",
+                    },
                 },
-                "product_b_id": {
-                    "type": "string",
-                    "description": "The unique identifier of Product B.",
-                },
+                "required": ["product_a_id", "product_b_id"],
             },
-            "required": ["product_a_id", "product_b_id"],
-        },
+        }
     },
     {
-        "type": "function",
-        "name": "product_search",
-        "description": "Search for products based on criteria.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The search query string.",
+        "function": {
+            "name": "product_search",
+            "description": "Search for products based on criteria.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query string.",
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "The category to filter the search.",
+                    },
+                    "min_price": {
+                        "type": "number",
+                        "description": "The minimum price of the products to search.",
+                        "default": 0,
+                    },
+                    "max_price": {
+                        "type": "number",
+                        "description": "The maximum price of the products to search.",
+                    },
+                    "page": {
+                        "type": "integer",
+                        "description": "The page number for pagination.",
+                        "default": 1,
+                    },
+                    "page_size": {
+                        "type": "integer",
+                        "description": "The number of results per page.",
+                        "default": 20,
+                    },
                 },
-                "category": {
-                    "type": "string",
-                    "description": "The category to filter the search.",
-                },
-                "min_price": {
-                    "type": "number",
-                    "description": "The minimum price of the products to search.",
-                    "default": 0,
-                },
-                "max_price": {
-                    "type": "number",
-                    "description": "The maximum price of the products to search.",
-                },
-                "page": {
-                    "type": "integer",
-                    "description": "The page number for pagination.",
-                    "default": 1,
-                },
-                "page_size": {
-                    "type": "integer",
-                    "description": "The number of results per page.",
-                    "default": 20,
-                },
+                "required": ["query"],
             },
-            "required": ["query"],
-        },
+        }
     },
     {
-        "type": "function",
-        "name": "customer_support",
-        "description": "Get contact information for customer support regarding an issue.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "issue_type": {
-                    "type": "string",
-                    "description": "The type of issue (e.g., billing, technical support).",
-                }
-            },
-            "required": ["issue_type"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "track_package",
-        "description": "Track the status of a package based on the tracking number.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "tracking_number": {
-                    "type": "integer",
-                    "description": "The tracking number of the package.",
-                }
-            },
-            "required": ["tracking_number"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "product_details",
-        "description": "Returns details for a given product id",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "product_id": {
-                    "type": "string",
-                    "description": "The id of a product to look up.",
-                }
-            },
-            "required": ["product_id"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "apply_discount_code",
-        "description": "Applies the discount code to a given order.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "order_id": {
-                    "type": "integer",
-                    "description": "The id of the order to apply the discount code to.",
+        "function": {
+            "name": "customer_support",
+            "description": "Get contact information for customer support regarding an issue.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "issue_type": {
+                        "type": "string",
+                        "description": "The type of issue (e.g., billing, technical support).",
+                    }
                 },
-                "discount_code": {
-                    "type": "string",
-                    "description": "The discount code to apply",
-                },
+                "required": ["issue_type"],
             },
-            "required": ["order_id", "discount_code"],
-        },
+        }
+    },
+    {
+        "function": {
+            "name": "track_package",
+            "description": "Track the status of a package based on the tracking number.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tracking_number": {
+                        "type": "integer",
+                        "description": "The tracking number of the package.",
+                    }
+                },
+                "required": ["tracking_number"],
+            },
+        }
+    },
+    {
+        "function": {
+            "name": "product_details",
+            "description": "Returns details for a given product id",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                        "description": "The id of a product to look up.",
+                    }
+                },
+                "required": ["product_id"],
+            },
+        }
+    },
+    {
+        "function": {
+            "name": "apply_discount_code",
+            "description": "Applies the discount code to a given order.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "order_id": {
+                        "type": "integer",
+                        "description": "The id of the order to apply the discount code to.",
+                    },
+                    "discount_code": {
+                        "type": "string",
+                        "description": "The discount code to apply",
+                    },
+                },
+                "required": ["order_id", "discount_code"],
+            },
+        }
     },
 ]
 
-model_id = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8"
-base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-4-mvk-17b-128e-fp8/v1"
+# model_id = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8"
+# base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-4-mvk-17b-128e-fp8/v1"
+
+model_id = "meta-llama/llama-3-3-70b-instruct"
+base_url = "'https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-3-3-70b-instruct/v1'"
 
 model = OpenAIModel(
     model=model_id,
     temperature=0,
-    api_key='/',
+    api_key="/",
     base_url=base_url,
-    default_headers={'RITS_API_KEY': os.environ["RITS_API_KEY"]},
+    default_headers={"RITS_API_KEY": os.environ["RITS_API_KEY"]},
 )
 
 # resp = model(GEN_TEMPLATE)
@@ -219,21 +242,6 @@ Here is more information on each function:
 
 """
 
-from opentelemetry import trace
-
-tracer = trace.get_tracer(__name__)
-
-from openinference.semconv.trace import (
-    SpanAttributes,
-    ToolCallAttributes,
-    OpenInferenceSpanKindValues,
-)
-
-
-import os
-from langchain_openai import ChatOpenAI
-from openai import OpenAI
-
 # model_id = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8"
 # base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-4-mvk-17b-128e-fp8/v1"
 
@@ -243,63 +251,10 @@ base_url = "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.
 rits_client = OpenAI(api_key=os.environ.get("RITS_API_KEY"), base_url=base_url)
 
 TASK_MODEL = model_id
-#TASK_MODEL = "gpt-4o"
+# TASK_MODEL = "gpt-4o"
 gen_params = {}
 gen_params["extra_headers"] = {"RITS_API_KEY": os.environ.get("RITS_API_KEY")}
 
-from agents import Agent, Runner, function_tool
-from typing import List, Union
-from openai import OpenAI
-import ast
-
-@function_tool
-def movie_selector_llm(genre: str) -> List[str]:
-    prompt = (
-        f"List up to 5 recent popular streaming movies in the {genre} genre. "
-        "Provide only movie titles as a Python list of strings."
-    )
-    response = rits_client.chat.completions.create(
-        model=model_id,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
-        max_tokens=150,
-        **gen_params
-    )
-    content = response.choices[0].message.content
-    try:
-        movie_list = ast.literal_eval(content)
-        if isinstance(movie_list, list):
-            return movie_list[:5]
-    except Exception:
-        return content.split('\n')
-
-@function_tool
-def reviewer_llm(movies: Union[str, List[str]]) -> str:
-    if isinstance(movies, list):
-        movies_str = ", ".join(movies)
-        prompt = f"Sort the following movies by rating from highest to lowest and provide a short review for each:\n{movies_str}"
-    else:
-        prompt = f"Provide a short review and rating for the movie: {movies}"
-    response = rits_client.chat.completions.create(
-            model=model_id,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=300,
-            **gen_params
-    )
-    return response.choices[0].message.content.strip()
-
-@function_tool
-def preview_summarizer_llm(movie: str) -> str:
-    prompt = f"Write a 1-2 sentence summary describing the movie '{movie}'."
-    response = rits_client.chat.completions.create(
-        model=model_id,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
-        max_tokens=100,
-        **gen_params
-    )
-    return response.choices[0].message.content.strip()
 
 def agent_router(input):
     # Obtain a tracer instance
@@ -310,11 +265,30 @@ def agent_router(input):
             SpanAttributes.OPENINFERENCE_SPAN_KIND: OpenInferenceSpanKindValues.AGENT.value
         },
     ) as span:
+        # response = rits_client.chat.completions.create(
+        #     model=TASK_MODEL,
+        #     temperature=0,
+        #     #functions=functions,
+        #     # tools=[movie_selector_llm, reviewer_llm, preview_summarizer_llm],
+        #     tools=functions,
+        #     messages=[
+        #         {
+        #             "role": "system",
+        #             "content": " ",
+        #         },
+        #         {
+        #             "role": "user",
+        #             "content": input["questions"],
+        #         },
+        #     ],
+        #     #tool_choice="auto",
+        #     **gen_params
+        # )
+
         response = rits_client.chat.completions.create(
             model=TASK_MODEL,
             temperature=0,
-            #functions=functions,
-            tools=[movie_selector_llm, reviewer_llm, preview_summarizer_llm],
+            tools=functions,
             messages=[
                 {
                     "role": "system",
@@ -325,30 +299,32 @@ def agent_router(input):
                     "content": input["questions"],
                 },
             ],
-            #tool_choice="auto",
-            **gen_params
+            **gen_params,
         )
+        if len(response.choices[0].message.tool_calls) > 0:
+            for tool_call in response.choices[0].message.tool_calls:
+                # Call handle_function_call if a function call is detected
+                if tool_call.type != "function":
+                    continue
 
-        if hasattr(response.choices[0].message.function_call, "name"):
-            function_call_name = response.choices[0].message.function_call.name
-            arguments = response.choices[0].message.function_call.arguments
-            # Call handle_function_call if a function call is detected
-            generated_response = handle_function_call(
-                function_call_name, arguments
-            )
+                function_name = tool_call.function.name
+                function_arguments = json.loads(tool_call.function.arguments)
+
+                generated_response = handle_function_call(function_name, function_arguments)
+                break
         else:
-            function_call_name = "no function called"
-            arguments = "no function called"
-            generated_response = response.choices[0].message.content
+            function_name = "no function called"
+            function_arguments = "no function called"
+            generated_response = response.choices[0].message
 
-        print(f"Running for question: {input['questions']}, function_call_name: {function_call_name}") 
+        print(f"Running for question: {input['questions']}, function_call_name: {function_name}")
 
         span.set_attribute(SpanAttributes.INPUT_VALUE, input["questions"])
         span.set_attribute(SpanAttributes.OUTPUT_VALUE, generated_response)
         ret = {
             "question": input,
-            "function_call_name": function_call_name,
-            "arguments": arguments,
+            "function_call_name": function_name,
+            "arguments": function_arguments,
             "output": generated_response,
         }
     return ret
@@ -363,9 +339,7 @@ def handle_function_call(function_call_name, arguments):
         attributes={
             SpanAttributes.OPENINFERENCE_SPAN_KIND: OpenInferenceSpanKindValues.TOOL.value,
             ToolCallAttributes.TOOL_CALL_FUNCTION_NAME: function_call_name,
-            ToolCallAttributes.TOOL_CALL_FUNCTION_ARGUMENTS_JSON: str(
-                arguments
-            ),
+            ToolCallAttributes.TOOL_CALL_FUNCTION_ARGUMENTS_JSON: str(arguments),
             SpanAttributes.INPUT_VALUE: function_call_name,
         },
     ):
@@ -386,12 +360,13 @@ def handle_function_call(function_call_name, arguments):
                     "content": prompt,
                 },
             ],
-            **gen_params
+            **gen_params,
         )
 
         # Extract the generated response from the LLM
         generated_response = response.choices[0].message.content
         return generated_response
+
 
 def process_questions(df):
     results = []
@@ -408,5 +383,5 @@ def process_questions(df):
 returned_df = process_questions(questions_df)
 
 output_file_path = join(script_directory, "returned_df.jsonl")
-returned_df.to_json(output_file_path, orient='records', lines=True, force_ascii=False)
+returned_df.to_json(output_file_path, orient="records", lines=True, force_ascii=False)
 pass
